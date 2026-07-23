@@ -25,7 +25,6 @@ export default function GuestEntryForm({ onSubmit, onCancel }) {
         <label className="login-label">Table Number *</label>
         <input
           className="login-input"
-          autoFocus
           inputMode="numeric"
           value={tableNumber}
           onChange={(e) => setTableNumber(e.target.value)}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api';
 import { TAX_RATE } from '../../constants';
-import CategoryTabs from '../CategoryTabs';
+import CategoryPicker from './CategoryPicker';
 import ProductGrid from '../ProductGrid';
 import CustomizeModal from '../CustomizeModal';
 import Cart from '../Cart';
@@ -85,6 +85,7 @@ export default function CustomerApp({ onExit }) {
     sessionStorage.removeItem(SESSION_KEY);
     setActiveOrder(null);
     setCart([]);
+    setSelectedCategory(null);
     setStep('entry');
   }
 
@@ -133,8 +134,14 @@ export default function CustomerApp({ onExit }) {
 
       <div className="app-body">
         <main className="catalog">
-          <CategoryTabs categories={categories} selected={selectedCategory} onSelect={setSelectedCategory} />
-          <ProductGrid products={visibleProducts} onSelect={setCustomizeTarget} />
+          {selectedCategory === null ? (
+            <CategoryPicker categories={categories} onSelect={setSelectedCategory} />
+          ) : (
+            <>
+              <button className="btn category-back" onClick={() => setSelectedCategory(null)}>← Back to Categories</button>
+              <ProductGrid products={visibleProducts} onSelect={setCustomizeTarget} />
+            </>
+          )}
         </main>
 
         <Cart

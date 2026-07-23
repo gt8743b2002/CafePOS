@@ -1,11 +1,4 @@
-const CATEGORY_ICONS = {
-  Coffee: '☕',
-  Beverages: '🥤',
-  'Pastries & Bakery': '🥐',
-  Breakfast: '🍳',
-  Lunch: '🥪',
-  Groceries: '🛒',
-};
+import { CATEGORY_ICONS } from '../constants';
 
 export default function CategoryTabs({ categories, selected, onSelect }) {
   return (

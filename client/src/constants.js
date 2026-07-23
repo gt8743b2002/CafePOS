@@ -21,3 +21,12 @@ export const PAYMENT_METHODS = [
 ];
 
 export const QUICK_CASH_AMOUNTS = [5, 10, 20, 50, 100];
+
+export const CATEGORY_ICONS = {
+  Coffee: '☕',
+  Beverages: '🥤',
+  'Pastries & Bakery': '🥐',
+  Breakfast: '🍳',
+  Lunch: '🥪',
+  Groceries: '🛒',
+};
