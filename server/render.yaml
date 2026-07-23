@@ -1,0 +1,31 @@
+# Render Blueprint for the CafePOS backend.
+#
+# This file lives in server/, not the repo root, because the repo also
+# deploys client/ separately to Netlify. When creating the Blueprint in
+# Render's dashboard, set the "render.yaml path" field to server/render.yaml.
+#
+# Render does not support persistent disks on the free plan — a disk
+# requires at least the "starter" instance type. Since /data must survive
+# redeploys (it holds the SQLite DB and uploaded product photos), this
+# service is defined on "starter" rather than "free".
+services:
+  - type: web
+    name: cafepos-server
+    runtime: node
+    plan: starter
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/categories
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22.11.0
+      - key: DATA_DIR
+        value: /data
+      - key: JWT_SECRET
+        generateValue: true
+    disk:
+      name: cafepos-data
+      mountPath: /data
+      sizeGB: 1
