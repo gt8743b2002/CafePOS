@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Server data & uploads (local runtime state, not source)
+server/data/
+server/uploads/
+
+# Env files
+.env
+.env.local
+*.env
+
+# Build output
+dist/
+dist-ssr/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+
+# Local Claude Code settings
+.claude/settings.local.json
