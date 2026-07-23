@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api, setToken } from '../api';
 
-export default function LoginPage({ onLogin }) {
+export default function LoginPage({ onLogin, onBack }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -57,6 +57,8 @@ export default function LoginPage({ onLogin }) {
         <button className="btn btn-primary login-submit" type="submit" disabled={busy || !username || !password}>
           {busy ? 'Signing in…' : 'Sign In'}
         </button>
+
+        {onBack && <button type="button" className="btn-link login-back" onClick={onBack}>← Back</button>}
       </form>
     </div>
   );

@@ -88,4 +88,12 @@ export const api = {
 
   getReportSummary: (date) => request(`/api/reports/summary${date ? `?date=${date}` : ''}`),
   getReportDaily: (days) => request(`/api/reports/daily${days ? `?days=${days}` : ''}`),
+
+  updateOrderStatus: (id, status) => request(`/api/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+
+  // ---------- Public guest ordering (no auth) ----------
+  createStripeIntent: (items) => request('/api/public/payments/stripe/intent', { method: 'POST', body: JSON.stringify({ items }) }),
+  createPaypalOrder: (items) => request('/api/public/payments/paypal/order', { method: 'POST', body: JSON.stringify({ items }) }),
+  createGuestOrder: (data) => request('/api/orders/guest', { method: 'POST', body: JSON.stringify(data) }),
+  getGuestOrderStatus: (id, token) => request(`/api/public/orders/${id}/status?token=${encodeURIComponent(token)}`),
 };
