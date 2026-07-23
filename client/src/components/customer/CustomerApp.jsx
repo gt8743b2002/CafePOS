@@ -25,6 +25,7 @@ export default function CustomerApp({ onExit }) {
   const [cart, setCart] = useState([]);
   const [activeOrder, setActiveOrder] = useState(null); // { id, guestToken }
   const [error, setError] = useState('');
+  const [enteringMenu, setEnteringMenu] = useState(false);
 
   // Resume an in-flight order (e.g. after an accidental refresh while waiting).
   useEffect(() => {
@@ -47,6 +48,7 @@ export default function CustomerApp({ onExit }) {
     setTableNumber(table);
     setGuestName(name);
     setError('');
+    setEnteringMenu(true);
     try {
       const [cats, prods, adds] = await Promise.all([api.getCategories(), api.getProducts(), api.getAddons()]);
       setCategories(cats);
@@ -54,7 +56,10 @@ export default function CustomerApp({ onExit }) {
       setAddons(adds);
       setStep('menu');
     } catch (e) {
-      setError(e.message);
+      console.error('Failed to load menu:', e);
+      setError(e.message || 'Could not load the menu. Please try again.');
+    } finally {
+      setEnteringMenu(false);
     }
   }
 
@@ -90,7 +95,7 @@ export default function CustomerApp({ onExit }) {
   }
 
   if (step === 'entry') {
-    return <GuestEntryForm onSubmit={enterMenu} onCancel={onExit} />;
+    return <GuestEntryForm onSubmit={enterMenu} onCancel={onExit} submitting={enteringMenu} error={error} />;
   }
 
   if (step === 'status' && activeOrder) {

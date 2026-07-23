@@ -1,12 +1,12 @@
 import { useState } from 'react';
 
-export default function GuestEntryForm({ onSubmit, onCancel }) {
+export default function GuestEntryForm({ onSubmit, onCancel, submitting, error }) {
   const [tableNumber, setTableNumber] = useState('');
   const [name, setName] = useState('');
 
   function handleSubmit(e) {
     e.preventDefault();
-    if (!tableNumber.trim()) return;
+    if (!tableNumber.trim() || submitting) return;
     onSubmit(tableNumber.trim(), name.trim());
   }
 
@@ -21,6 +21,8 @@ export default function GuestEntryForm({ onSubmit, onCancel }) {
         />
         <div className="login-title">Your Order</div>
         <div className="login-subtitle">Tell us where you're sitting</div>
+
+        {error && <div className="error-banner">{error}</div>}
 
         <label className="login-label">Table Number *</label>
         <input
@@ -39,8 +41,8 @@ export default function GuestEntryForm({ onSubmit, onCancel }) {
           placeholder="e.g. Alex"
         />
 
-        <button className="btn btn-primary login-submit" type="submit" disabled={!tableNumber.trim()}>
-          Browse Menu
+        <button className="btn btn-primary login-submit" type="submit" disabled={!tableNumber.trim() || submitting}>
+          {submitting ? 'Loading menu…' : 'Browse Menu'}
         </button>
 
         <button type="button" className="btn-link login-back" onClick={onCancel}>← Back</button>
