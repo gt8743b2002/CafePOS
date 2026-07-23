@@ -1,7 +1,13 @@
 const path = require('node:path');
+const fs = require('node:fs');
 const { DatabaseSync } = require('node:sqlite');
 
-const dbPath = path.join(__dirname, 'data', 'cafepos.db');
+// Everything that must survive a redeploy (the DB file, uploaded photos) lives under
+// one directory so a single persistent volume mounted at DATA_DIR covers all of it.
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
+const dbPath = path.join(DATA_DIR, 'cafepos.db');
 const db = new DatabaseSync(dbPath);
 
 db.exec(`
@@ -101,3 +107,4 @@ migrateColumns('orders', [
 ]);
 
 module.exports = db;
+module.exports.DATA_DIR = DATA_DIR;

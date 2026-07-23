@@ -1,4 +1,5 @@
 import { formatMoney, sizePrice } from '../pricing';
+import { assetUrl } from '../api';
 
 function ProductCard({ product, onSelect }) {
   const outOfStock = product.track_stock && product.stock_qty <= 0;
@@ -10,7 +11,7 @@ function ProductCard({ product, onSelect }) {
       {!outOfStock && lowStock && <div className="stock-badge stock-low">Low: {product.stock_qty}</div>}
       <div className="product-top">
         <div className="product-image">
-          {product.image_path ? <img src={product.image_path} alt={product.name} /> : <span className="product-emoji">{product.icon || '🧾'}</span>}
+          {product.image_path ? <img src={assetUrl(product.image_path)} alt={product.name} /> : <span className="product-emoji">{product.icon || '🧾'}</span>}
         </div>
         {product.has_size ? (
           <div className="product-price product-price-stack">

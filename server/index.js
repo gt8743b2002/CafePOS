@@ -12,7 +12,7 @@ const { hashPassword, verifyPassword, signToken, authenticate, requireAdmin } = 
 seed();
 seed.seedUsers();
 
-const UPLOAD_DIR = path.join(__dirname, 'uploads');
+const UPLOAD_DIR = path.join(db.DATA_DIR, 'uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const app = express();

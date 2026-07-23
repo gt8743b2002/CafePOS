@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../api';
+import { api, assetUrl } from '../../api';
 import { sizePrice } from '../../pricing';
 
 const emptyForm = {
@@ -168,7 +168,7 @@ export default function ProductsTab() {
             <tr key={p.id} className={!p.active ? 'row-inactive' : ''}>
               <td>
                 <label className="photo-cell" title="Click to change photo">
-                  {p.image_path ? <img className="table-thumb" src={p.image_path} alt="" /> : <span>{p.icon}</span>}
+                  {p.image_path ? <img className="table-thumb" src={assetUrl(p.image_path)} alt="" /> : <span>{p.icon}</span>}
                   <input
                     type="file" accept="image/*" style={{ display: 'none' }}
                     onChange={(e) => handlePhotoChange(p, e.target.files?.[0] || null)}

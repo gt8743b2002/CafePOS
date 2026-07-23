@@ -1,5 +1,10 @@
 const TOKEN_KEY = 'cafepos_token';
 
+// In local dev this is empty and Vite's dev-server proxy (vite.config.js) forwards
+// /api and /uploads to localhost:4000. In production (e.g. Netlify) there is no such
+// proxy, so this must be set to the deployed backend's URL at build time.
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+
 let unauthorizedHandler = null;
 export function setUnauthorizedHandler(fn) {
   unauthorizedHandler = fn;
@@ -13,9 +18,15 @@ export function setToken(token) {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
+// Prefixes an /uploads/... path (e.g. product.image_path) with the API base
+// so images resolve correctly when the frontend and backend are on different origins.
+export function assetUrl(path) {
+  return path ? `${API_BASE}${path}` : path;
+}
+
 async function request(path, options = {}) {
   const token = getToken();
-  const res = await fetch(path, {
+  const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
