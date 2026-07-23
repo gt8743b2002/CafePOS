@@ -24,26 +24,53 @@ export function assetUrl(path) {
   return path ? `${API_BASE}${path}` : path;
 }
 
+const CONNECTIVITY_ERROR = 'Cannot connect to server. Please check your connection and try again.';
+
 async function request(path, options = {}) {
   const token = getToken();
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    });
+  } catch {
+    // fetch() itself rejected: offline, DNS failure, blocked by CORS, etc. —
+    // never even reached a server, so this is never a session problem.
+    throw new Error(CONNECTIVITY_ERROR);
+  }
+
   if (res.status === 401) {
+    const body = await res.json().catch(() => null);
+    // Our own auth middleware always replies 401 with { error: '...' } JSON,
+    // and only ever for requests that actually carried a token. A 401 that
+    // doesn't match that shape (e.g. an HTML page) — or one that arrived
+    // despite no token being sent — didn't come from our backend at all.
+    // That's a misrouted/misconfigured API call, not an expired session.
+    if (!token || !body || typeof body.error !== 'string') {
+      throw new Error(CONNECTIVITY_ERROR);
+    }
     setToken(null);
     unauthorizedHandler?.();
     throw new Error('Session expired. Please log in again.');
   }
+
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
+    const body = await res.json().catch(() => null);
+    if (!body) throw new Error(CONNECTIVITY_ERROR);
     throw new Error(body.error || `Request failed: ${res.status}`);
   }
-  return res.status === 204 ? null : res.json();
+
+  if (res.status === 204) return null;
+  try {
+    return await res.json();
+  } catch {
+    throw new Error(CONNECTIVITY_ERROR);
+  }
 }
 
 export const api = {
