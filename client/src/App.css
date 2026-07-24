@@ -440,6 +440,23 @@ body {
   .modal-overlay { align-items: flex-start; padding: 12px; padding-top: calc(24px + env(safe-area-inset-top, 0px)); padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
   .modal { max-height: 62vh; max-height: 62dvh; }
 
+  /* Compact spacing so more of the panel fits without scrolling, instead of
+     scaling/zooming the whole thing (which blurs text and throws off touch
+     target alignment). */
+  .modal-header { padding: 10px 14px; }
+  .modal-title { font-size: 16px; gap: 6px; }
+  .modal-icon { font-size: 18px; }
+  .modal-subtitle { font-size: 11px; }
+  .modal-body { padding: 10px 14px; }
+  .modal-footer { padding: 10px 14px; }
+  .modal-total { font-size: 17px; }
+  .option-group { margin-bottom: 10px; }
+  .option-label { font-size: 11px; margin-bottom: 6px; }
+  .pill-row { gap: 6px; }
+  .pill { padding: 5px 10px; font-size: 12px; }
+  .pill-size { padding: 5px 12px; }
+  .note-input { padding: 6px 8px; font-size: 12px; }
+
   /* Narrower header so icon + title + badge + buttons fit one row without crowding */
   .app-header { padding: 10px 12px; gap: 8px; }
   .app-title { font-size: 15px; gap: 6px; }
