@@ -49,8 +49,19 @@ export default function CustomerApp({ onExit }) {
     setGuestName(name);
     setError('');
     setEnteringMenu(true);
+    const loadCatalog = () => Promise.all([api.getCategories(), api.getProducts(), api.getAddons()]);
     try {
-      const [cats, prods, adds] = await Promise.all([api.getCategories(), api.getProducts(), api.getAddons()]);
+      let cats, prods, adds;
+      try {
+        [cats, prods, adds] = await loadCatalog();
+      } catch (firstError) {
+        // The very first requests of a session can hit a cold-started backend
+        // (e.g. Render's free/starter tier waking from idle) before it's ready.
+        // These are read-only GETs, so retrying once is safe.
+        console.warn('Catalog load failed, retrying once:', firstError);
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        [cats, prods, adds] = await loadCatalog();
+      }
       setCategories(cats);
       setProducts(prods);
       setAddons(adds);
