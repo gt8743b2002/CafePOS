@@ -1,6 +1,15 @@
 import { useMemo, useState } from 'react';
 import { SIZES, SUGAR_LEVELS, ICE_LEVELS, MILK_LEVELS } from '../constants';
 import { computeUnitPrice, formatMoney, sizePrice } from '../pricing';
+import { assetUrl } from '../api';
+
+function SugarDrop({ filled }) {
+  return (
+    <svg className={`sugar-drop ${filled ? 'sugar-drop-filled' : ''}`} width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 2C12 2 5 11 5 15.5C5 19.09 8.13 22 12 22C15.87 22 19 19.09 19 15.5C19 11 12 2 12 2Z" />
+    </svg>
+  );
+}
 
 export default function CustomizeModal({ product, addons, onCancel, onAdd }) {
   const [size, setSize] = useState('MEDIUM');
@@ -36,18 +45,22 @@ export default function CustomizeModal({ product, addons, onCancel, onAdd }) {
 
   return (
     <div className="modal-overlay" onMouseDown={onCancel}>
-      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="modal customize-modal" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-header modal-header-stacked">
+          <div className="modal-product-image">
+            {product.image_path ? (
+              <img src={assetUrl(product.image_path)} alt={product.name} />
+            ) : (
+              <span className="modal-product-emoji">{product.icon || '🧾'}</span>
+            )}
+          </div>
           <div className="modal-header-top">
-            <div className="modal-title">
-              <span className="modal-icon">{product.icon}</span>
-              {product.name}
-            </div>
+            <div className="modal-title">{product.name}</div>
             <button className="icon-btn" onClick={onCancel} aria-label="Close">✕</button>
           </div>
           <div className="modal-header-actions">
             <div className="modal-total">{formatMoney(unitPrice * qty)}</div>
-            <button className="btn btn-primary" onClick={handleAdd}>Add to Order</button>
+            <button className="btn btn-primary btn-add-to-order" onClick={handleAdd}>Add to Order</button>
           </div>
         </div>
 
@@ -75,9 +88,19 @@ export default function CustomizeModal({ product, addons, onCancel, onAdd }) {
               <div className="option-group">
                 <div className="option-label">Sugar Level</div>
                 <div className="pill-row">
-                  {SUGAR_LEVELS.map((s) => (
-                    <button key={s} className={`pill ${sugarLevel === s ? 'pill-active' : ''}`} onClick={() => setSugarLevel(s)}>
-                      {s}
+                  {SUGAR_LEVELS.map((s, i) => (
+                    <button
+                      key={s}
+                      className={`pill sugar-pill ${sugarLevel === s ? 'pill-active' : ''}`}
+                      onClick={() => setSugarLevel(s)}
+                      aria-label={`${s} sugar`}
+                    >
+                      <span className="sugar-drops">
+                        {SUGAR_LEVELS.map((_, dropIdx) => (
+                          <SugarDrop key={dropIdx} filled={dropIdx <= i} />
+                        ))}
+                      </span>
+                      <span className="sugar-pill-label">{s}</span>
                     </button>
                   ))}
                 </div>
