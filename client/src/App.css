@@ -585,9 +585,7 @@ body {
 .modal-footer {
   display: flex; align-items: center; justify-content: space-between;
   padding: 16px 20px; border-top: 1px solid var(--border);
-  position: sticky; bottom: 0; z-index: 2;
-  background: var(--bg-surface);
-  box-shadow: 0 -6px 16px rgba(20, 15, 10, 0.1);
+  flex-shrink: 0;
 }
 .modal-total { font-size: 20px; font-weight: 700; }
 
