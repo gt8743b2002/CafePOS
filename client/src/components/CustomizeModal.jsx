@@ -37,12 +37,18 @@ export default function CustomizeModal({ product, addons, onCancel, onAdd }) {
   return (
     <div className="modal-overlay" onMouseDown={onCancel}>
       <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title">
-            <span className="modal-icon">{product.icon}</span>
-            {product.name}
+        <div className="modal-header modal-header-stacked">
+          <div className="modal-header-top">
+            <div className="modal-title">
+              <span className="modal-icon">{product.icon}</span>
+              {product.name}
+            </div>
+            <button className="icon-btn" onClick={onCancel} aria-label="Close">✕</button>
           </div>
-          <button className="icon-btn" onClick={onCancel} aria-label="Close">✕</button>
+          <div className="modal-header-actions">
+            <div className="modal-total">{formatMoney(unitPrice * qty)}</div>
+            <button className="btn btn-primary" onClick={handleAdd}>Add to Order</button>
+          </div>
         </div>
 
         <div className="modal-body">
@@ -137,11 +143,6 @@ export default function CustomizeModal({ product, addons, onCancel, onAdd }) {
               <button onClick={() => setQty((q) => q + 1)}>+</button>
             </div>
           </div>
-        </div>
-
-        <div className="modal-footer">
-          <div className="modal-total">{formatMoney(unitPrice * qty)}</div>
-          <button className="btn btn-primary" onClick={handleAdd}>Add to Order</button>
         </div>
       </div>
     </div>
