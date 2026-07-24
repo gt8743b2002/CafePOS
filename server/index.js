@@ -8,6 +8,8 @@ const db = require('./db');
 const seed = require('./seed');
 const { TAX_RATE, SIZE_MODIFIERS, MILK_MODIFIERS } = require('./constants');
 const { hashPassword, verifyPassword, signToken, authenticate, requireAdmin } = require('./auth');
+// Stripe/PayPal integration (server/payments/) is a separate, not-yet-committed
+// piece of work — this file must not depend on it until that lands.
 
 seed();
 seed.seedUsers();
@@ -21,6 +23,124 @@ app.use(express.json({ limit: '8mb' }));
 app.use('/uploads', express.static(UPLOAD_DIR));
 
 const asRow = (row) => row || null;
+
+// ---------- Order pricing (shared by staff POS + public guest ordering) ----------
+class OrderError extends Error {}
+
+function sizePrice(product, size) {
+  if (size === 'SMALL' && product.price_small != null) return product.price_small;
+  if (size === 'LARGE' && product.price_large != null) return product.price_large;
+  return product.base_price + (SIZE_MODIFIERS[size] ?? 0);
+}
+
+function computeLinePrice(product, opts) {
+  let unit = product.has_size && opts.size ? sizePrice(product, opts.size) : product.base_price;
+  if (product.is_drink && opts.milk_level) {
+    unit += MILK_MODIFIERS[opts.milk_level] ?? 0;
+  }
+  const addonsTotal = (opts.addons || []).reduce((sum, a) => sum + (Number(a.price) || 0), 0);
+  unit += addonsTotal;
+  return Math.max(0, unit);
+}
+
+// Recomputes subtotal/tax/total for a cart server-side — a client-supplied amount is never trusted.
+function priceCart(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new OrderError('items must be a non-empty array');
+  }
+  const productStmt = db.prepare('SELECT * FROM products WHERE id = ?');
+  const line = [];
+  let subtotal = 0;
+
+  for (const item of items) {
+    const product = productStmt.get(Number(item.product_id));
+    if (!product || !product.active) {
+      throw new OrderError(`Product ${item.product_id} not found or inactive`);
+    }
+    const qty = Number(item.qty) || 1;
+    if (product.track_stock && product.stock_qty < qty) {
+      throw new OrderError(`Not enough stock for ${product.name} (have ${product.stock_qty}, need ${qty})`);
+    }
+    const unitPrice = computeLinePrice(product, item);
+    const lineTotal = Math.round(unitPrice * qty * 100) / 100;
+    subtotal += lineTotal;
+    line.push({
+      product,
+      qty,
+      unitPrice,
+      lineTotal,
+      size: item.size || null,
+      sugar_level: item.sugar_level || null,
+      ice_level: item.ice_level || null,
+      milk_level: item.milk_level || null,
+      addons: item.addons || [],
+      note: item.note || null,
+    });
+  }
+
+  subtotal = Math.round(subtotal * 100) / 100;
+  const tax = Math.round(subtotal * TAX_RATE * 100) / 100;
+  const total = Math.round((subtotal + tax) * 100) / 100;
+  return { line, subtotal, tax, total };
+}
+
+function createOrderRecord({
+  items, orderType, paymentMethod, cashReceived,
+  cashierId, cashierName, source, tableNumber, guestName, kitchenStatus, paymentRef, guestToken,
+}) {
+  const { line, subtotal, tax, total } = priceCart(items);
+
+  let cashReceivedFinal = null;
+  let changeDue = null;
+  if (paymentMethod === 'CASH') {
+    cashReceivedFinal = Math.round(Number(cashReceived) * 100) / 100;
+    if (!Number.isFinite(cashReceivedFinal) || cashReceivedFinal < total) {
+      throw new OrderError(`Cash received (${cashReceivedFinal}) is less than total due (${total})`);
+    }
+    changeDue = Math.round((cashReceivedFinal - total) * 100) / 100;
+  }
+
+  const createdAt = new Date().toISOString();
+
+  const orderInfo = db.prepare(`
+    INSERT INTO orders (
+      created_at, subtotal, tax, total, status, order_type, payment_method, cash_received, change_due,
+      cashier_id, cashier_name, source, table_number, guest_name, kitchen_status, payment_ref, guest_token
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    createdAt, subtotal, tax, total, 'completed', orderType, paymentMethod, cashReceivedFinal, changeDue,
+    cashierId ?? null, cashierName ?? null, source, tableNumber ?? null, guestName ?? null,
+    kitchenStatus ?? null, paymentRef ?? null, guestToken ?? null
+  );
+  const orderId = orderInfo.lastInsertRowid;
+
+  const insertItem = db.prepare(`
+    INSERT INTO order_items (order_id, product_id, name, size, sugar_level, ice_level, milk_level, addons_json, note, unit_price, qty, line_total)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const decrementStock = db.prepare('UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?');
+
+  for (const l of line) {
+    insertItem.run(
+      orderId, l.product.id, l.product.name, l.size, l.sugar_level, l.ice_level, l.milk_level,
+      JSON.stringify(l.addons), l.note, l.unitPrice, l.qty, l.lineTotal
+    );
+    if (l.product.track_stock) {
+      decrementStock.run(l.qty, l.product.id);
+    }
+  }
+
+  return getOrderDetail(orderId);
+}
+
+function getOrderDetail(id) {
+  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+  if (!order) return null;
+  const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(id)
+    .map((it) => ({ ...it, addons: JSON.parse(it.addons_json || '[]') }));
+  return { ...order, items };
+}
 
 // ---------- Public read-only catalog (no login required — used by guest ordering) ----------
 app.get('/api/categories', (req, res) => {
@@ -51,80 +171,54 @@ app.get('/api/addons', (req, res) => {
   res.json(db.prepare(sql).all());
 });
 
-// ---------- Guest ordering (no login) — counter payment only for now.
-// Online payment (Stripe/PayPal) is a separate, not-yet-deployed piece of work.
+// ---------- Public guest ordering (table-side, no login) ----------
+// Counter payment only for now — Stripe/PayPal verification is a separate,
+// not-yet-committed piece of work (see server/payments/).
+const KITCHEN_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'SERVED'];
+
 app.post('/api/orders/guest', (req, res) => {
   const { items, table_number, guest_name, payment_method } = req.body;
   if (!table_number) return res.status(400).json({ error: 'table_number is required' });
   if (payment_method !== 'COUNTER') {
     return res.status(400).json({ error: 'Online payments are not set up yet. Choose "Pay at Counter" to place this order.' });
   }
-  if (!Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ error: 'items must be a non-empty array' });
-  }
 
-  const productStmt = db.prepare('SELECT * FROM products WHERE id = ?');
-  const line = [];
-  let subtotal = 0;
-  for (const item of items) {
-    const product = productStmt.get(Number(item.product_id));
-    if (!product || !product.active) {
-      return res.status(400).json({ error: `Product ${item.product_id} not found or inactive` });
-    }
-    const qty = Number(item.qty) || 1;
-    if (product.track_stock && product.stock_qty < qty) {
-      return res.status(400).json({ error: `Not enough stock for ${product.name} (have ${product.stock_qty}, need ${qty})` });
-    }
-    const unitPrice = computeLinePrice(product, item);
-    const lineTotal = Math.round(unitPrice * qty * 100) / 100;
-    subtotal += lineTotal;
-    line.push({
-      product, qty, unitPrice, lineTotal,
-      size: item.size || null, sugar_level: item.sugar_level || null, ice_level: item.ice_level || null,
-      milk_level: item.milk_level || null, addons: item.addons || [], note: item.note || null,
+  try {
+    const guestToken = crypto.randomUUID();
+    const order = createOrderRecord({
+      items,
+      orderType: 'DINE_IN',
+      paymentMethod: 'COUNTER',
+      cashReceived: null,
+      cashierId: null,
+      cashierName: null,
+      source: 'CUSTOMER',
+      tableNumber: String(table_number),
+      guestName: guest_name || null,
+      kitchenStatus: 'RECEIVED',
+      paymentRef: null,
+      guestToken,
     });
+    res.status(201).json({ order, guest_token: guestToken });
+  } catch (e) {
+    res.status(e instanceof OrderError ? 400 : 500).json({ error: e.message });
   }
-  subtotal = Math.round(subtotal * 100) / 100;
-  const tax = Math.round(subtotal * TAX_RATE * 100) / 100;
-  const total = Math.round((subtotal + tax) * 100) / 100;
-
-  const createdAt = new Date().toISOString();
-  const guestToken = crypto.randomUUID();
-
-  const orderInfo = db.prepare(`
-    INSERT INTO orders (
-      created_at, subtotal, tax, total, status, order_type, payment_method, cash_received, change_due,
-      source, table_number, guest_name, kitchen_status, guest_token
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    createdAt, subtotal, tax, total, 'completed', 'DINE_IN', 'COUNTER', null, null,
-    'CUSTOMER', String(table_number), guest_name || null, 'RECEIVED', guestToken
-  );
-  const orderId = orderInfo.lastInsertRowid;
-
-  const insertItem = db.prepare(`
-    INSERT INTO order_items (order_id, product_id, name, size, sugar_level, ice_level, milk_level, addons_json, note, unit_price, qty, line_total)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const decrementStock = db.prepare('UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?');
-  for (const l of line) {
-    insertItem.run(
-      orderId, l.product.id, l.product.name, l.size, l.sugar_level, l.ice_level, l.milk_level,
-      JSON.stringify(l.addons), l.note, l.unitPrice, l.qty, l.lineTotal
-    );
-    if (l.product.track_stock) decrementStock.run(l.qty, l.product.id);
-  }
-
-  res.status(201).json({ order: getOrderDetail(orderId), guest_token: guestToken });
 });
 
 app.get('/api/public/orders/:id/status', (req, res) => {
   const { token } = req.query;
-  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(Number(req.params.id));
+  const order = getOrderDetail(Number(req.params.id));
   if (!order || order.source !== 'CUSTOMER' || !order.guest_token || order.guest_token !== token) {
     return res.status(404).json({ error: 'Order not found' });
   }
-  res.json({ kitchen_status: order.kitchen_status, table_number: order.table_number, total: order.total });
+  res.json({
+    id: order.id,
+    kitchen_status: order.kitchen_status,
+    created_at: order.created_at,
+    table_number: order.table_number,
+    total: order.total,
+    items: order.items.map((it) => ({ name: it.name, qty: it.qty })),
+  });
 });
 
 // ---------- Auth ----------
@@ -209,7 +303,7 @@ app.delete('/api/users/:id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- Products (mutations — admin only; public listing is registered above) ----------
+// ---------- Products (mutations — admin only; reads are public, defined above) ----------
 app.post('/api/products', requireAdmin, (req, res) => {
   const { category_id, name, base_price, price_small, price_large, icon, has_size, is_drink, track_stock, stock_qty } = req.body;
   if (!category_id || !name || base_price == null) {
@@ -275,7 +369,7 @@ app.post('/api/uploads', requireAdmin, (req, res) => {
   res.json({ image_path: `/uploads/${filename}` });
 });
 
-// ---------- Addons (mutations — admin only; public listing is registered above) ----------
+// ---------- Addons (mutations — admin only; reads are public, defined above) ----------
 app.post('/api/addons', requireAdmin, (req, res) => {
   const { name, price } = req.body;
   if (!name || price == null) return res.status(400).json({ error: 'name and price are required' });
@@ -298,23 +392,7 @@ app.delete('/api/addons/:id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- Orders / Checkout ----------
-function sizePrice(product, size) {
-  if (size === 'SMALL' && product.price_small != null) return product.price_small;
-  if (size === 'LARGE' && product.price_large != null) return product.price_large;
-  return product.base_price + (SIZE_MODIFIERS[size] ?? 0);
-}
-
-function computeLinePrice(product, opts) {
-  let unit = product.has_size && opts.size ? sizePrice(product, opts.size) : product.base_price;
-  if (product.is_drink && opts.milk_level) {
-    unit += MILK_MODIFIERS[opts.milk_level] ?? 0;
-  }
-  const addonsTotal = (opts.addons || []).reduce((sum, a) => sum + (Number(a.price) || 0), 0);
-  unit += addonsTotal;
-  return Math.max(0, unit);
-}
-
+// ---------- Orders / Checkout (staff — unchanged behavior, now backed by createOrderRecord) ----------
 const ORDER_TYPES = ['DINE_IN', 'TAKE_AWAY'];
 const PAYMENT_METHODS = ['CASH', 'CARD'];
 
@@ -326,93 +404,38 @@ app.post('/api/orders', (req, res) => {
   const orderType = ORDER_TYPES.includes(order_type) ? order_type : 'TAKE_AWAY';
   const paymentMethod = PAYMENT_METHODS.includes(payment_method) ? payment_method : 'CASH';
 
-  const productStmt = db.prepare('SELECT * FROM products WHERE id = ?');
-  const line = [];
-  let subtotal = 0;
-
-  for (const item of items) {
-    const product = productStmt.get(Number(item.product_id));
-    if (!product || !product.active) {
-      return res.status(400).json({ error: `Product ${item.product_id} not found or inactive` });
-    }
-    const qty = Number(item.qty) || 1;
-    if (product.track_stock && product.stock_qty < qty) {
-      return res.status(400).json({ error: `Not enough stock for ${product.name} (have ${product.stock_qty}, need ${qty})` });
-    }
-    const unitPrice = computeLinePrice(product, item);
-    const lineTotal = Math.round(unitPrice * qty * 100) / 100;
-    subtotal += lineTotal;
-    line.push({
-      product,
-      qty,
-      unitPrice,
-      lineTotal,
-      size: item.size || null,
-      sugar_level: item.sugar_level || null,
-      ice_level: item.ice_level || null,
-      milk_level: item.milk_level || null,
-      addons: item.addons || [],
-      note: item.note || null,
+  try {
+    const order = createOrderRecord({
+      items,
+      orderType,
+      paymentMethod,
+      cashReceived: cash_received,
+      cashierId: req.user.id,
+      cashierName: req.user.name,
+      source: 'STAFF',
+      tableNumber: null,
+      guestName: null,
+      kitchenStatus: null,
+      paymentRef: null,
+      guestToken: null,
     });
+    res.status(201).json(order);
+  } catch (e) {
+    res.status(e instanceof OrderError ? 400 : 500).json({ error: e.message });
   }
-
-  subtotal = Math.round(subtotal * 100) / 100;
-  const tax = Math.round(subtotal * TAX_RATE * 100) / 100;
-  const total = Math.round((subtotal + tax) * 100) / 100;
-
-  let cashReceived = null;
-  let changeDue = null;
-  if (paymentMethod === 'CASH') {
-    cashReceived = Math.round(Number(cash_received) * 100) / 100;
-    if (!Number.isFinite(cashReceived) || cashReceived < total) {
-      return res.status(400).json({ error: `Cash received (${cashReceived}) is less than total due (${total})` });
-    }
-    changeDue = Math.round((cashReceived - total) * 100) / 100;
-  }
-
-  const createdAt = new Date().toISOString();
-
-  const orderInfo = db.prepare(`
-    INSERT INTO orders (created_at, subtotal, tax, total, status, order_type, payment_method, cash_received, change_due, cashier_id, cashier_name)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(createdAt, subtotal, tax, total, 'completed', orderType, paymentMethod, cashReceived, changeDue, req.user.id, req.user.name);
-  const orderId = orderInfo.lastInsertRowid;
-
-  const insertItem = db.prepare(`
-    INSERT INTO order_items (order_id, product_id, name, size, sugar_level, ice_level, milk_level, addons_json, note, unit_price, qty, line_total)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const decrementStock = db.prepare('UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?');
-
-  for (const l of line) {
-    insertItem.run(
-      orderId, l.product.id, l.product.name, l.size, l.sugar_level, l.ice_level, l.milk_level,
-      JSON.stringify(l.addons), l.note, l.unitPrice, l.qty, l.lineTotal
-    );
-    if (l.product.track_stock) {
-      decrementStock.run(l.qty, l.product.id);
-    }
-  }
-
-  res.status(201).json(getOrderDetail(orderId));
 });
 
-function getOrderDetail(id) {
-  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
-  if (!order) return null;
-  const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(id)
-    .map((it) => ({ ...it, addons: JSON.parse(it.addons_json || '[]') }));
-  return { ...order, items };
-}
-
 app.get('/api/orders', (req, res) => {
-  const { from, to, cashier_id } = req.query;
+  const { from, to, cashier_id, source } = req.query;
   let sql = 'SELECT * FROM orders';
   const clauses = [];
   const params = [];
   if (from) { clauses.push('created_at >= ?'); params.push(from); }
   if (to) { clauses.push('created_at <= ?'); params.push(to); }
-  if (req.user.role === 'CASHIER') {
+  if (source) { clauses.push('source = ?'); params.push(source); }
+  if (req.user.role === 'CASHIER' && source !== 'CUSTOMER') {
+    // Cashiers see only their own rung-up sales — except the live customer order
+    // queue, which every logged-in staff member needs to see in full.
     clauses.push('cashier_id = ?');
     params.push(req.user.id);
   } else if (cashier_id) {
@@ -422,6 +445,13 @@ app.get('/api/orders', (req, res) => {
   if (clauses.length) sql += ' WHERE ' + clauses.join(' AND ');
   sql += ' ORDER BY created_at DESC LIMIT 200';
   const orders = db.prepare(sql).all(...params);
+
+  // The live kitchen queue needs to show what's actually in each order.
+  if (source === 'CUSTOMER' && orders.length) {
+    const itemsStmt = db.prepare('SELECT name, qty FROM order_items WHERE order_id = ?');
+    for (const o of orders) o.items = itemsStmt.all(o.id);
+  }
+
   res.json(orders);
 });
 
@@ -432,6 +462,19 @@ app.get('/api/orders/:id', (req, res) => {
     return res.status(403).json({ error: 'You can only view your own orders' });
   }
   res.json(detail);
+});
+
+app.patch('/api/orders/:id/status', (req, res) => {
+  const id = Number(req.params.id);
+  const { status } = req.body;
+  if (!KITCHEN_STATUSES.includes(status)) {
+    return res.status(400).json({ error: `status must be one of: ${KITCHEN_STATUSES.join(', ')}` });
+  }
+  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+  if (order.source !== 'CUSTOMER') return res.status(400).json({ error: 'Only customer orders have a kitchen status' });
+  db.prepare('UPDATE orders SET kitchen_status = ? WHERE id = ?').run(status, id);
+  res.json(getOrderDetail(id));
 });
 
 // ---------- Reports ----------
