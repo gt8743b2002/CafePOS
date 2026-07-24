@@ -27,6 +27,15 @@ export default function CustomerApp({ onExit }) {
   const [error, setError] = useState('');
   const [enteringMenu, setEnteringMenu] = useState(false);
 
+  // This app has no real page navigation — switching screens is just a
+  // re-render, so the browser keeps whatever scroll position the previous
+  // screen was left at (e.g. shifted up while the keyboard was open on the
+  // table-number form). Reset it on every screen change so the new screen
+  // always starts at the top instead of looking cut off.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [step, selectedCategory]);
+
   // Resume an in-flight order (e.g. after an accidental refresh while waiting).
   useEffect(() => {
     const saved = sessionStorage.getItem(SESSION_KEY);
