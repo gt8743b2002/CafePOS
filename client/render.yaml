@@ -1,0 +1,27 @@
+# Render Blueprint for deploying the CafePOS frontend as a static site.
+#
+# This file lives in client/, not the repo root — mirrors server/render.yaml's
+# pattern, so each deployable piece keeps its own Blueprint alongside its code.
+# When creating the Blueprint in Render's dashboard, set the "render.yaml path"
+# field to client/render.yaml.
+#
+# VITE_API_BASE_URL below points at the backend's current Render URL. Vite
+# bakes this into the JS bundle at build time (see client/src/api.js), so if
+# the backend URL ever changes again, update it here (or in the Render
+# dashboard's env var UI) and trigger a redeploy — editing it after the fact
+# without rebuilding does nothing, same as it would on Netlify today.
+services:
+  - type: web
+    name: cafepos-client
+    runtime: static
+    rootDir: client
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    autoDeploy: true
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://cafepos-1.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
