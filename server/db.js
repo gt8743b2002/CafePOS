@@ -106,5 +106,14 @@ migrateColumns('orders', [
   ['cashier_name', 'ALTER TABLE orders ADD COLUMN cashier_name TEXT'],
 ]);
 
+migrateColumns('orders', [
+  ['source', "ALTER TABLE orders ADD COLUMN source TEXT NOT NULL DEFAULT 'STAFF'"],
+  ['table_number', 'ALTER TABLE orders ADD COLUMN table_number TEXT'],
+  ['guest_name', 'ALTER TABLE orders ADD COLUMN guest_name TEXT'],
+  ['kitchen_status', 'ALTER TABLE orders ADD COLUMN kitchen_status TEXT'],
+  ['payment_ref', 'ALTER TABLE orders ADD COLUMN payment_ref TEXT'],
+  ['guest_token', 'ALTER TABLE orders ADD COLUMN guest_token TEXT'],
+]);
+
 module.exports = db;
 module.exports.DATA_DIR = DATA_DIR;

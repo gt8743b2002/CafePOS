@@ -107,9 +107,12 @@ export default function GuestCheckoutPanel({ items, total, tableNumber, guestNam
                 {PAYPAL_CLIENT_ID && (
                   <button className="payment-choice-btn" disabled={busy} onClick={() => setMethod('paypal')}>🅿️ PayPal</button>
                 )}
+                <button className="payment-choice-btn" disabled={busy} onClick={() => finalizeGuestOrder('COUNTER', null)}>
+                  🧾 Pay at Counter
+                </button>
               </div>
               {!STRIPE_KEY && !PAYPAL_CLIENT_ID && (
-                <div className="empty-state">Online payments aren't set up yet — please pay at the counter.</div>
+                <div className="empty-state">Online payments aren't set up yet — choose "Pay at Counter" to place your order.</div>
               )}
             </div>
           )}

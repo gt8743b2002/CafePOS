@@ -22,6 +22,111 @@ app.use('/uploads', express.static(UPLOAD_DIR));
 
 const asRow = (row) => row || null;
 
+// ---------- Public read-only catalog (no login required — used by guest ordering) ----------
+app.get('/api/categories', (req, res) => {
+  const rows = db.prepare('SELECT * FROM categories ORDER BY sort_order').all();
+  res.json(rows);
+});
+
+app.get('/api/products', (req, res) => {
+  const { category, includeInactive } = req.query;
+  let sql = 'SELECT * FROM products';
+  const clauses = [];
+  const params = [];
+  if (category) {
+    clauses.push('category_id = ?');
+    params.push(Number(category));
+  }
+  if (!includeInactive) {
+    clauses.push('active = 1');
+  }
+  if (clauses.length) sql += ' WHERE ' + clauses.join(' AND ');
+  sql += ' ORDER BY name';
+  res.json(db.prepare(sql).all(...params));
+});
+
+app.get('/api/addons', (req, res) => {
+  const { includeInactive } = req.query;
+  const sql = includeInactive ? 'SELECT * FROM addons ORDER BY name' : 'SELECT * FROM addons WHERE active = 1 ORDER BY name';
+  res.json(db.prepare(sql).all());
+});
+
+// ---------- Guest ordering (no login) — counter payment only for now.
+// Online payment (Stripe/PayPal) is a separate, not-yet-deployed piece of work.
+app.post('/api/orders/guest', (req, res) => {
+  const { items, table_number, guest_name, payment_method } = req.body;
+  if (!table_number) return res.status(400).json({ error: 'table_number is required' });
+  if (payment_method !== 'COUNTER') {
+    return res.status(400).json({ error: 'Online payments are not set up yet. Choose "Pay at Counter" to place this order.' });
+  }
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'items must be a non-empty array' });
+  }
+
+  const productStmt = db.prepare('SELECT * FROM products WHERE id = ?');
+  const line = [];
+  let subtotal = 0;
+  for (const item of items) {
+    const product = productStmt.get(Number(item.product_id));
+    if (!product || !product.active) {
+      return res.status(400).json({ error: `Product ${item.product_id} not found or inactive` });
+    }
+    const qty = Number(item.qty) || 1;
+    if (product.track_stock && product.stock_qty < qty) {
+      return res.status(400).json({ error: `Not enough stock for ${product.name} (have ${product.stock_qty}, need ${qty})` });
+    }
+    const unitPrice = computeLinePrice(product, item);
+    const lineTotal = Math.round(unitPrice * qty * 100) / 100;
+    subtotal += lineTotal;
+    line.push({
+      product, qty, unitPrice, lineTotal,
+      size: item.size || null, sugar_level: item.sugar_level || null, ice_level: item.ice_level || null,
+      milk_level: item.milk_level || null, addons: item.addons || [], note: item.note || null,
+    });
+  }
+  subtotal = Math.round(subtotal * 100) / 100;
+  const tax = Math.round(subtotal * TAX_RATE * 100) / 100;
+  const total = Math.round((subtotal + tax) * 100) / 100;
+
+  const createdAt = new Date().toISOString();
+  const guestToken = crypto.randomUUID();
+
+  const orderInfo = db.prepare(`
+    INSERT INTO orders (
+      created_at, subtotal, tax, total, status, order_type, payment_method, cash_received, change_due,
+      source, table_number, guest_name, kitchen_status, guest_token
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    createdAt, subtotal, tax, total, 'completed', 'DINE_IN', 'COUNTER', null, null,
+    'CUSTOMER', String(table_number), guest_name || null, 'RECEIVED', guestToken
+  );
+  const orderId = orderInfo.lastInsertRowid;
+
+  const insertItem = db.prepare(`
+    INSERT INTO order_items (order_id, product_id, name, size, sugar_level, ice_level, milk_level, addons_json, note, unit_price, qty, line_total)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const decrementStock = db.prepare('UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?');
+  for (const l of line) {
+    insertItem.run(
+      orderId, l.product.id, l.product.name, l.size, l.sugar_level, l.ice_level, l.milk_level,
+      JSON.stringify(l.addons), l.note, l.unitPrice, l.qty, l.lineTotal
+    );
+    if (l.product.track_stock) decrementStock.run(l.qty, l.product.id);
+  }
+
+  res.status(201).json({ order: getOrderDetail(orderId), guest_token: guestToken });
+});
+
+app.get('/api/public/orders/:id/status', (req, res) => {
+  const { token } = req.query;
+  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(Number(req.params.id));
+  if (!order || order.source !== 'CUSTOMER' || !order.guest_token || order.guest_token !== token) {
+    return res.status(404).json({ error: 'Order not found' });
+  }
+  res.json({ kitchen_status: order.kitchen_status, table_number: order.table_number, total: order.total });
+});
+
 // ---------- Auth ----------
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body;
@@ -104,30 +209,7 @@ app.delete('/api/users/:id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- Categories ----------
-app.get('/api/categories', (req, res) => {
-  const rows = db.prepare('SELECT * FROM categories ORDER BY sort_order').all();
-  res.json(rows);
-});
-
-// ---------- Products ----------
-app.get('/api/products', (req, res) => {
-  const { category, includeInactive } = req.query;
-  let sql = 'SELECT * FROM products';
-  const clauses = [];
-  const params = [];
-  if (category) {
-    clauses.push('category_id = ?');
-    params.push(Number(category));
-  }
-  if (!includeInactive) {
-    clauses.push('active = 1');
-  }
-  if (clauses.length) sql += ' WHERE ' + clauses.join(' AND ');
-  sql += ' ORDER BY name';
-  res.json(db.prepare(sql).all(...params));
-});
-
+// ---------- Products (mutations — admin only; public listing is registered above) ----------
 app.post('/api/products', requireAdmin, (req, res) => {
   const { category_id, name, base_price, price_small, price_large, icon, has_size, is_drink, track_stock, stock_qty } = req.body;
   if (!category_id || !name || base_price == null) {
@@ -193,13 +275,7 @@ app.post('/api/uploads', requireAdmin, (req, res) => {
   res.json({ image_path: `/uploads/${filename}` });
 });
 
-// ---------- Addons ----------
-app.get('/api/addons', (req, res) => {
-  const { includeInactive } = req.query;
-  const sql = includeInactive ? 'SELECT * FROM addons ORDER BY name' : 'SELECT * FROM addons WHERE active = 1 ORDER BY name';
-  res.json(db.prepare(sql).all());
-});
-
+// ---------- Addons (mutations — admin only; public listing is registered above) ----------
 app.post('/api/addons', requireAdmin, (req, res) => {
   const { name, price } = req.body;
   if (!name || price == null) return res.status(400).json({ error: 'name and price are required' });
