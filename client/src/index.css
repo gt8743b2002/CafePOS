@@ -9,11 +9,15 @@
 
 html, body {
   margin: 0;
+  height: 100vh;
+  height: 100dvh;
   max-width: 100vw;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 #root {
-  min-height: 100svh;
+  height: 100vh;
+  height: 100dvh;
   max-width: 100vw;
+  overflow: hidden;
 }
