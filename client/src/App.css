@@ -450,8 +450,8 @@ body {
   .modal-body { padding: 10px 14px; }
   .modal-footer { padding: 10px 14px; }
   .modal-total { font-size: 17px; }
-  .modal-product-image { height: 96px; }
-  .modal-product-emoji { font-size: 40px; }
+  .modal-thumb { width: 36px; height: 36px; }
+  .modal-thumb-emoji { font-size: 20px; }
   .option-group { margin-bottom: 10px; }
   .option-label { font-size: 11px; margin-bottom: 6px; }
   .pill-row { gap: 6px; }
@@ -639,23 +639,25 @@ body {
 
 /* ---------- CustomizeModal redesign (scoped so it doesn't affect .pill
    usage elsewhere, e.g. PaymentPanel's quick-cash buttons) ---------- */
+.customize-modal { max-width: 400px; }
 .customize-modal .pill, .customize-modal .pill-size { border-radius: 8px; }
 
 .btn-add-to-order { background: #16a34a; border-color: #16a34a; }
 .btn-add-to-order:hover { background: #15803d; border-color: #15803d; }
 
-.modal-product-image {
-  width: 100%;
-  height: 140px;
-  border-radius: 10px;
+.modal-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--bg-page);
+  flex-shrink: 0;
 }
-.modal-product-image img { width: 100%; height: 100%; object-fit: cover; }
-.modal-product-emoji { font-size: 56px; }
+.modal-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.modal-thumb-emoji { font-size: 26px; }
 
 .sugar-pill { flex-direction: column; align-items: center; gap: 4px; padding: 8px 10px; }
 .sugar-drops { display: flex; gap: 2px; }

@@ -47,15 +47,17 @@ export default function CustomizeModal({ product, addons, onCancel, onAdd }) {
     <div className="modal-overlay" onMouseDown={onCancel}>
       <div className="modal customize-modal" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-header modal-header-stacked">
-          <div className="modal-product-image">
-            {product.image_path ? (
-              <img src={assetUrl(product.image_path)} alt={product.name} />
-            ) : (
-              <span className="modal-product-emoji">{product.icon || '🧾'}</span>
-            )}
-          </div>
           <div className="modal-header-top">
-            <div className="modal-title">{product.name}</div>
+            <div className="modal-title">
+              <span className="modal-thumb">
+                {product.image_path ? (
+                  <img src={assetUrl(product.image_path)} alt="" />
+                ) : (
+                  <span className="modal-thumb-emoji">{product.icon || '🧾'}</span>
+                )}
+              </span>
+              {product.name}
+            </div>
             <button className="icon-btn" onClick={onCancel} aria-label="Close">✕</button>
           </div>
           <div className="modal-header-actions">
