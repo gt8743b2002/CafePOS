@@ -64,6 +64,14 @@ export default function CustomizeModal({ product, addons, onCancel, onAdd }) {
             <div className="modal-total">{formatMoney(unitPrice * qty)}</div>
             <button className="btn btn-primary btn-add-to-order" onClick={handleAdd}>Add to Order</button>
           </div>
+          <div className="modal-header-qty">
+            <span className="modal-header-qty-label">Quantity</span>
+            <div className="qty-stepper">
+              <button onClick={() => setQty((q) => Math.max(1, q - 1))}>-</button>
+              <span>{qty}</span>
+              <button onClick={() => setQty((q) => q + 1)}>+</button>
+            </div>
+          </div>
         </div>
 
         <div className="modal-body">
@@ -160,14 +168,6 @@ export default function CustomizeModal({ product, addons, onCancel, onAdd }) {
             />
           </div>
 
-          <div className="option-group qty-row">
-            <div className="option-label">Quantity</div>
-            <div className="qty-stepper">
-              <button onClick={() => setQty((q) => Math.max(1, q - 1))}>-</button>
-              <span>{qty}</span>
-              <button onClick={() => setQty((q) => q + 1)}>+</button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
