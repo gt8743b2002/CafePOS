@@ -115,7 +115,11 @@ export default function Cart({ cart, cashierName, onRemove, onQtyChange, onCheck
           <div className="totals-row totals-total"><span>Total</span><span>{formatMoney(total)}</span></div>
         </div>
 
-        <button className="btn btn-primary btn-checkout" disabled={isEmpty || checkingOut} onClick={onCheckout}>
+        <button
+          className="btn btn-primary btn-checkout"
+          disabled={isEmpty || checkingOut}
+          onClick={() => { setExpanded(false); onCheckout(); }}
+        >
           {checkingOut ? 'Processing…' : 'Charge'}
         </button>
       </aside>
