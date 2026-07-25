@@ -444,8 +444,8 @@ body {
 
   /* Give the customize modal guaranteed clearance from the browser chrome /
      home indicator so header and footer both stay fully on-screen. */
-  .modal-overlay { align-items: flex-start; padding: 12px; padding-top: calc(10px + env(safe-area-inset-top, 0px)); padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
-  .modal { max-height: 50vh; max-height: 50dvh; transform: scale(0.8); transform-origin: center top; }
+  .modal-overlay { align-items: flex-start; padding: 12px; padding-top: calc(16px + env(safe-area-inset-top, 0px)); padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .modal { max-height: 85vh; max-height: 85dvh; }
 
   /* Compact spacing so more of the panel fits without scrolling, instead of
      scaling/zooming the whole thing (which blurs text and throws off touch
@@ -646,7 +646,7 @@ body {
 
 /* ---------- CustomizeModal redesign (scoped so it doesn't affect .pill
    usage elsewhere, e.g. PaymentPanel's quick-cash buttons) ---------- */
-.customize-modal { max-width: 400px; }
+.customize-modal { max-width: 420px; }
 .customize-modal .pill, .customize-modal .pill-size { border-radius: 8px; }
 
 .btn-add-to-order { background: #16a34a; border-color: #16a34a; }
