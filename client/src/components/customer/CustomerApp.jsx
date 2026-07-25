@@ -23,7 +23,8 @@ export default function CustomerApp({ onExit }) {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [customizeTarget, setCustomizeTarget] = useState(null);
   const [cart, setCart] = useState([]);
-  const [activeOrder, setActiveOrder] = useState(null); // { id, guestToken }
+  const [orders, setOrders] = useState([]); // [{ id, guestToken }, ...] — one entry per order this session
+  const [viewingIndex, setViewingIndex] = useState(0);
   const [error, setError] = useState('');
   const [enteringMenu, setEnteringMenu] = useState(false);
 
@@ -36,16 +37,17 @@ export default function CustomerApp({ onExit }) {
     window.scrollTo(0, 0);
   }, [step, selectedCategory]);
 
-  // Resume an in-flight order (e.g. after an accidental refresh while waiting).
+  // Resume in-flight orders (e.g. after an accidental refresh while waiting).
   useEffect(() => {
     const saved = sessionStorage.getItem(SESSION_KEY);
     if (!saved) return;
     try {
       const parsed = JSON.parse(saved);
-      if (parsed.activeOrderId && parsed.guestToken) {
+      if (parsed.orders?.length) {
         setTableNumber(parsed.tableNumber || '');
         setGuestName(parsed.guestName || '');
-        setActiveOrder({ id: parsed.activeOrderId, guestToken: parsed.guestToken });
+        setOrders(parsed.orders);
+        setViewingIndex(parsed.orders.length - 1);
         setStep('status');
       }
     } catch {
@@ -100,15 +102,26 @@ export default function CustomerApp({ onExit }) {
   }
 
   function handlePaymentSuccess(order, guestToken) {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ tableNumber, guestName, activeOrderId: order.id, guestToken }));
-    setActiveOrder({ id: order.id, guestToken });
+    const nextOrders = [...orders, { id: order.id, guestToken }];
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ tableNumber, guestName, orders: nextOrders }));
+    setOrders(nextOrders);
+    setViewingIndex(nextOrders.length - 1);
     setCart([]);
     setStep('status');
   }
 
+  // Add more items to the same table while an order is still in progress —
+  // the catalog is already loaded and the table/session stay as-is, so this
+  // just goes straight back to the menu instead of the table-number form.
+  function placeNewOrder() {
+    setSelectedCategory(null);
+    setStep('menu');
+  }
+
   function startNewOrder() {
     sessionStorage.removeItem(SESSION_KEY);
-    setActiveOrder(null);
+    setOrders([]);
+    setViewingIndex(0);
     setCart([]);
     setSelectedCategory(null);
     setStep('entry');
@@ -118,8 +131,16 @@ export default function CustomerApp({ onExit }) {
     return <GuestEntryForm onSubmit={enterMenu} onCancel={onExit} submitting={enteringMenu} error={error} />;
   }
 
-  if (step === 'status' && activeOrder) {
-    return <OrderStatusView orderId={activeOrder.id} guestToken={activeOrder.guestToken} onNewOrder={startNewOrder} />;
+  if (step === 'status' && orders.length > 0) {
+    return (
+      <OrderStatusView
+        orders={orders}
+        viewingIndex={viewingIndex}
+        onSelectOrder={setViewingIndex}
+        onPlaceNewOrder={placeNewOrder}
+        onStartOver={startNewOrder}
+      />
+    );
   }
 
   const items = cart.map((l) => ({

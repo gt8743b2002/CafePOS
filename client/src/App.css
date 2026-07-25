@@ -109,6 +109,13 @@ body {
 
 /* ---------- Order status stepper (customer-facing) ---------- */
 .status-card { max-width: 380px; }
+.order-history-list { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-bottom: 14px; }
+.order-history-item {
+  display: flex; justify-content: space-between; align-items: center;
+  min-height: 44px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg-page); color: var(--text-primary); font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.order-history-item-active { border-color: var(--accent); background: var(--accent-bg); }
 .status-stepper { display: flex; justify-content: space-between; width: 100%; margin: 24px 0 8px; }
 .status-step { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; min-width: 0; opacity: 0.35; }
 .status-step-icon {
