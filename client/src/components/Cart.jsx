@@ -120,7 +120,7 @@ export default function Cart({ cart, cashierName, onRemove, onQtyChange, onCheck
           disabled={isEmpty || checkingOut}
           onClick={() => { setExpanded(false); onCheckout(); }}
         >
-          {checkingOut ? 'Processing…' : 'Charge'}
+          {checkingOut ? 'Processing…' : 'Confirm'}
         </button>
       </aside>
 
@@ -133,7 +133,7 @@ export default function Cart({ cart, cashierName, onRemove, onQtyChange, onCheck
         >
           <span className="cart-mobile-bar-count">{itemCount} item{itemCount === 1 ? '' : 's'}</span>
           <span className="cart-mobile-bar-total">{formatMoney(total)}</span>
-          <span className="cart-mobile-bar-charge">Charge</span>
+          <span className="cart-mobile-bar-charge">Confirm</span>
         </button>
       )}
     </>

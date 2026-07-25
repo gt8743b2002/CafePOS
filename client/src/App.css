@@ -431,7 +431,9 @@ body {
 .btn-checkout {
   margin: 0 20px 16px; padding: 14px; font-size: 16px; border-radius: 10px;
   position: sticky; bottom: 0; z-index: 2;
+  background: #16a34a; border-color: #16a34a;
 }
+.btn-checkout:hover { background: #15803d; border-color: #15803d; }
 
 /* ---------- Cart: mobile bottom bar + drawer ---------- */
 .cart-drag-handle { display: none; }
